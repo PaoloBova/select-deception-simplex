@@ -4,6 +4,16 @@ import core
 param_list = [
     {"b": 1.5, "c": 0.5, "d": 0.1, "s": 0.2,
      "Z": 100, "beta": 1, "mu": 1e-3, "strategies": ['CC', 'HD', 'TD']},
+    {"b": 1.5, "c": 0.5, "d": 0.2, "s": 0.2,
+     "Z": 100, "beta": 1, "mu": 1e-3, "strategies": ['CC', 'HD', 'TD']},
+    {"b": 1.5, "c": 0.5, "d": 0.3, "s": 0.2,
+     "Z": 100, "beta": 1, "mu": 1e-3, "strategies": ['CC', 'HD', 'TD']},
+    {"b": 1.5, "c": 0.5, "d": 0.1, "s": 0.1,
+     "Z": 100, "beta": 1, "mu": 1e-3, "strategies": ['CC', 'HD', 'TD']},
+    {"b": 1.5, "c": 0.5, "d": 0.2, "s": 0.1,
+     "Z": 100, "beta": 1, "mu": 1e-3, "strategies": ['CC', 'HD', 'TD']},
+    {"b": 1.5, "c": 0.5, "d": 0.3, "s": 0.1,
+     "Z": 100, "beta": 1, "mu": 1e-3, "strategies": ['CC', 'HD', 'TD']},
 ]
 
 simulation_fn = None # Currently, no simulation_fn exists
