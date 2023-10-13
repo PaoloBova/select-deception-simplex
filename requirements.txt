@@ -1,0 +1,4 @@
+egttools
+matplotlib
+numpy
+tqdm
