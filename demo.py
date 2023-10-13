@@ -10,7 +10,7 @@ simulation_fn = None # Currently, no simulation_fn exists
 # plotting_fn = core.plot_simplex # ~30s per plot
 # plotting_fn = core.plot_simplex_numerical # ~150s per plot
 plotting_fn = core.plot_deception_frequency
-
+plotting_fn = core.plot_strategy_frequencies
 results = core.run_all_simulations(param_list,
                                    simulation_fn=simulation_fn,
                                    plotting_fn=plotting_fn,
