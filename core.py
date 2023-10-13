@@ -521,3 +521,123 @@ def plot_deception_frequency(params):
     plt.tight_layout()
     
     return fig
+
+def plot_strategy_frequencies(params):
+    
+    names = ["Z", "beta", "mu", "strategies"]
+    Z, beta, mu, strategies = [params[k] for k in names]
+    type_labels = strategies
+
+    # We make sure that our evolver represents payoffs as our desired function
+    evolver_payoffs = lambda freqs: tactical_deception_payoffs(freqs, params)
+
+    evolver = egt.analytical.StochDynamics(3, evolver_payoffs, Z)
+
+    # We also need to ensure that any fitness calculations involving our payoffs
+    # make use of our own custom methods.
+    class_args = {"pop_size": Z,
+                  "nb_strategies": len(type_labels),
+                  "payoffs_fn": evolver_payoffs}
+        
+    def fitness_pair_functional(x: int, i: int, j: int, *args: Optional[list]) -> float:
+            """
+            Calculates the fitness of strategy i versus strategy j, in
+            a population of x i-strategists and (pop_size-x) j strategists, considering
+            a 2-player game.
+
+            Parameters
+            ----------
+            x : int
+                number of i-strategists in the population
+            i : int
+                index of strategy i
+            j : int
+                index of strategy j
+            args : Optional[list]
+
+            Returns
+            -------
+                float
+                the fitness difference among the strategies
+            """
+            names = ["pop_size", "nb_strategies", "payoffs_fn"]
+            pop_size, nb_strategies, payoffs_fn = [class_args[k] for k in names]
+            popoulation_state_dict = {i: x, j: pop_size - x}
+            population_state = [popoulation_state_dict.get(k, 0)
+                                for k in range(nb_strategies)]
+            payoff_matrix = payoffs_fn(population_state)
+            fitness_i = ((x - 1) * payoff_matrix[i, i] +
+                        (pop_size - x) * payoff_matrix[i, j]) / (pop_size - 1)
+            fitness_j = ((pop_size - x - 1) * payoff_matrix[j, j] +
+                        x * payoff_matrix[j, i]) / (pop_size - 1)
+            return fitness_i - fitness_j
+
+    def full_fitness_difference_pairwise_functional(i: int, j: int, population_state: np.ndarray) -> float:
+            """
+            Calculates the fitness of strategy i in a population with state :param population_state,
+            assuming pairwise interactions (2-player game).
+
+            Parameters
+            ----------
+            i : int
+                index of the strategy that will reproduce
+            j : int
+                index of the strategy that will die
+            population_state : numpy.ndarray[numpy.int64[m,1]]
+                            vector containing the counts of each strategy in the population
+
+            Returns
+            -------
+            float
+            The fitness difference between the two strategies for the given population state
+            """
+            names = ["pop_size", "nb_strategies", "payoffs_fn"]
+            pop_size, nb_strategies, payoffs_fn = [class_args[k] for k in names]
+            # Here, our payoffs depend on the population state.
+            payoff_matrix = payoffs_fn(population_state)
+            fitness_i = (population_state[i] - 1) * payoff_matrix[i, i]
+            for strategy in range(nb_strategies):
+                if strategy == i:
+                    continue
+                fitness_i += population_state[strategy] * payoff_matrix[i, strategy]
+            fitness_j = (population_state[j] - 1) * payoff_matrix[j, j]
+            for strategy in range(nb_strategies):
+                if strategy == j:
+                    continue
+                fitness_j += population_state[strategy] * payoff_matrix[j, strategy]
+
+            return (fitness_i - fitness_j) / (pop_size - 1)
+
+    evolver.full_fitness = full_fitness_difference_pairwise_functional
+    evolver.fitness = fitness_pair_functional
+
+    # Enforce mu=0, otherwise, we would be computing the full stationary
+    # distribution of the population state for every value of beta.
+    # We just want the stationary distribution with respect to the monomorphic
+    # strategy profiles.
+    evolver.mu = 0
+    beta_list = np.arange(0.01, 10, 0.01)
+    stationary_distributions = []
+    for _, beta in tqdm(enumerate(beta_list)):
+        sd = evolver.calculate_stationary_distribution(beta)
+        stationary_distributions.append(sd)
+    strategy_1_freq = [sd[0] for sd in stationary_distributions]
+    strategy_2_freq = [sd[1] for sd in stationary_distributions]
+    strategy_3_freq = [sd[2] for sd in stationary_distributions]
+    
+    # Create the plot
+    fig = plt.figure(figsize=(10, 6))
+    # Plotting each strategy's frequency
+    plt.plot(beta_list, strategy_1_freq, label='CC', color='blue', linewidth=2)
+    plt.plot(beta_list, strategy_2_freq, label='HD', color='red', linewidth=2)
+    plt.plot(beta_list, strategy_3_freq, label='TD', color='green', linewidth=2)
+    
+    # Setting the title and labels
+    plt.title('Strategy Frequencies vs Selection Intensity')
+    plt.xlabel('Selection Intensity (beta)')
+    plt.ylabel('Strategy Frequency')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    
+    return fig
