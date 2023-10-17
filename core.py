@@ -47,6 +47,7 @@ def run_all_simulations(param_list: list,
             filename = f"dataframe_{simulation_id}_{idx}.csv"
             filepath = os.path.join(simulation_dir, filename)
             df.to_csv(filepath, index=False)
+            print(f"Saved file: {filepath}")
             simulation_results.append(df)
         if plotting_fn is not None:
             fig = plotting_fn(parameters)
@@ -54,6 +55,7 @@ def run_all_simulations(param_list: list,
             filename = f"plot_{simulation_id}_{idx}.png"
             filepath = os.path.join(plot_dir, filename)
             fig.savefig(filepath)
+            print(f"Saved file: {filepath}")
             plt.close(fig)  # Close the figure to free up memory
             figs.append(fig)
         
@@ -327,8 +329,8 @@ def plot_simplex(params):
 
 def plot_simplex_numerical(params):
     
-    names = ["Z", "beta", "mu", "strategies"]
-    Z, beta, mu, strategies = [params[k] for k in names]
+    names = ["Z", "beta", "mu", "strategies", "payoffs_fn"]
+    Z, beta, mu, strategies, payoffs_fn = [params[k] for k in names]
     type_labels = strategies
     simplex = egt.plotting.Simplex2D(discrete=True, size=Z, nb_points=Z+1)
 
@@ -337,9 +339,9 @@ def plot_simplex_numerical(params):
     frequencies_int = np.floor(frequencies * Z).astype(np.int64)
 
     # We make sure that our evolver represents payoffs as our desired function
-    evolver_payoffs = lambda freqs: tactical_deception_payoffs(freqs, params)
+    evolver_payoffs = lambda freqs: payoffs_fn(freqs, params)
 
-    evolver = egt.analytical.StochDynamics(3, evolver_payoffs, Z)
+    evolver = egt.analytical.StochDynamics(len(strategies), evolver_payoffs, Z)
 
     # We also need to ensure that any fitness calculations involving our payoffs
     # make use of our own custom methods.
@@ -433,6 +435,17 @@ def plot_simplex_numerical(params):
     roots_xy = [barycentric_to_xy_coordinates(x, simplex.corners) for x in roots]
 
     stability = calculate_stability(roots, calculate_gradients)
+    
+    # Unfortunately, the stability results are farily useless due to numerical
+    # issues. However, we know both from analysis, and observing the flows
+    # in the diagram, which roots are stable, unstable, and saddle points.
+    # So, we hardcode the stability for our chosen plot.
+    print("roots: ", roots)
+    print("roots_xy: ", roots_xy)
+    print("stability: ", stability)
+    
+    if params.get("hardcode_stability", False):
+        stability = [1, -1, 0, -1, 1, -1]
 
     evolver.mu = 0
     sd_rare_mutations = evolver.calculate_stationary_distribution(beta)
@@ -442,15 +455,38 @@ def plot_simplex_numerical(params):
     sd = evolver.calculate_stationary_distribution(beta)
 
     fig, ax = plt.subplots(figsize=(15,10))
+    
+    
+    font = {
+        # 'family' : 'normal',
+            # 'weight' : 'bold'
+            }
+    SMALL_SIZE = 14
+    MEDIUM_SIZE = 16
+    BIGGER_SIZE = 18
+
+    plt.rc('font', **font, size=MEDIUM_SIZE)          # controls default text sizes
+    plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
+    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=MEDIUM_SIZE)    # fontsize of the tick labels
+    plt.rc('ytick', labelsize=MEDIUM_SIZE)    # fontsize of the tick labels
+    plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+    
+    plt.rc('font', **font)
+
 
     plot = (simplex.add_axis(ax=ax)
             .apply_simplex_boundaries_to_gradients(Ux, Uy)
             .draw_gradients(zorder=5)
-            .add_colorbar()
             .draw_stationary_points(roots_xy, stability, zorder=11)
             .add_vertex_labels(type_labels)
             .draw_stationary_distribution(sd, vmax=0.0001, alpha=0.5, edgecolors='gray', cmap='binary', shading='gouraud', zorder=0)
             )
+    
+    fig.delaxes(fig.axes[1])
+    plot = plot.add_colorbar()
+    fig.delaxes(fig.axes[1])
 
     ax.axis('off')
     ax.set_aspect('equal')
@@ -462,14 +498,14 @@ def plot_simplex_numerical(params):
 
 def plot_deception_frequency(params):
     
-    names = ["Z", "beta", "mu", "strategies"]
-    Z, beta, mu, strategies = [params[k] for k in names]
+    names = ["Z", "beta", "mu", "strategies", "payoffs_fn"]
+    Z, beta, mu, strategies, payoffs_fn = [params[k] for k in names]
     type_labels = strategies
 
     # We make sure that our evolver represents payoffs as our desired function
-    evolver_payoffs = lambda freqs: tactical_deception_payoffs(freqs, params)
+    evolver_payoffs = lambda freqs: payoffs_fn(freqs, params)
 
-    evolver = egt.analytical.StochDynamics(3, evolver_payoffs, Z)
+    evolver = egt.analytical.StochDynamics(len(strategies), evolver_payoffs, Z)
 
     # We also need to ensure that any fitness calculations involving our payoffs
     # make use of our own custom methods.
@@ -580,14 +616,14 @@ def plot_deception_frequency(params):
 
 def plot_strategy_frequencies(params):
     
-    names = ["Z", "beta", "mu", "strategies"]
-    Z, beta, mu, strategies = [params[k] for k in names]
+    names = ["Z", "beta", "mu", "strategies", "payoffs_fn"]
+    Z, beta, mu, strategies, payoffs_fn = [params[k] for k in names]
     type_labels = strategies
 
     # We make sure that our evolver represents payoffs as our desired function
-    evolver_payoffs = lambda freqs: tactical_deception_payoffs(freqs, params)
+    evolver_payoffs = lambda freqs: payoffs_fn(freqs, params)
 
-    evolver = egt.analytical.StochDynamics(3, evolver_payoffs, Z)
+    evolver = egt.analytical.StochDynamics(len(type_labels), evolver_payoffs, Z)
 
     # We also need to ensure that any fitness calculations involving our payoffs
     # make use of our own custom methods.
@@ -677,23 +713,176 @@ def plot_strategy_frequencies(params):
     for _, beta in tqdm(enumerate(beta_list)):
         sd = evolver.calculate_stationary_distribution(beta)
         stationary_distributions.append(sd)
-    strategy_1_freq = [sd[0] for sd in stationary_distributions]
-    strategy_2_freq = [sd[1] for sd in stationary_distributions]
-    strategy_3_freq = [sd[2] for sd in stationary_distributions]
-    
     # Create the plot
-    fig = plt.figure(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(10, 6))
     # Plotting each strategy's frequency
-    plt.plot(beta_list, strategy_1_freq, label='CC', color='blue', linewidth=2)
-    plt.plot(beta_list, strategy_2_freq, label='HD', color='red', linewidth=2)
-    plt.plot(beta_list, strategy_3_freq, label='TD', color='green', linewidth=2)
-    
+    colors = ["blue", "red", "green", "orange", "pink"]
+    for i in range(len(stationary_distributions[0])):
+        strategy_freq = [sd[i] for sd in stationary_distributions]
+        ax.plot(beta_list, strategy_freq, label=type_labels[i], color=colors[i], linewidth=2)
+    # Set the x axis to be logarithmic
+    ax.set_xscale('log')  # Setting the x-axis to logarithmic scale
     # Setting the title and labels
-    plt.title('Strategy Frequencies vs Selection Intensity')
-    plt.xlabel('Selection Intensity (beta)')
-    plt.ylabel('Strategy Frequency')
-    plt.legend()
-    plt.grid(True)
+    ax.set_title('Strategy Frequencies vs Selection Intensity')
+    ax.set_xlabel('Selection Intensity (beta)')
+    ax.set_ylabel('Strategy Frequency')
+    ax.legend()
+    ax.grid(True, which="both", ls="--", c='0.7')  # Adding grid for better clarity
+    ax.set_xscale('log')  # Setting the x-axis to logarithmic scale
+    plt.tight_layout()
+    
+    return fig
+
+def plot_conflict_comparison(params):
+    
+    def generate_evolver(params):
+        names = ["Z", "beta", "mu", "strategies", "payoffs_fn"]
+        Z, beta, mu, strategies, payoffs_fn = [params[k] for k in names]
+        type_labels = strategies
+
+        # We make sure that our evolver represents payoffs as our desired function
+        evolver_payoffs = lambda freqs: payoffs_fn(freqs, params)
+
+        evolver = egt.analytical.StochDynamics(len(type_labels), evolver_payoffs, Z)
+
+        # We also need to ensure that any fitness calculations involving our payoffs
+        # make use of our own custom methods.
+        class_args = {"pop_size": Z,
+                    "nb_strategies": len(type_labels),
+                    "payoffs_fn": evolver_payoffs}
+            
+        def fitness_pair_functional(x: int, i: int, j: int, *args: Optional[list]) -> float:
+                """
+                Calculates the fitness of strategy i versus strategy j, in
+                a population of x i-strategists and (pop_size-x) j strategists, considering
+                a 2-player game.
+
+                Parameters
+                ----------
+                x : int
+                    number of i-strategists in the population
+                i : int
+                    index of strategy i
+                j : int
+                    index of strategy j
+                args : Optional[list]
+
+                Returns
+                -------
+                    float
+                    the fitness difference among the strategies
+                """
+                names = ["pop_size", "nb_strategies", "payoffs_fn"]
+                pop_size, nb_strategies, payoffs_fn = [class_args[k] for k in names]
+                popoulation_state_dict = {i: x, j: pop_size - x}
+                population_state = [popoulation_state_dict.get(k, 0)
+                                    for k in range(nb_strategies)]
+                payoff_matrix = payoffs_fn(population_state)
+                fitness_i = ((x - 1) * payoff_matrix[i, i] +
+                            (pop_size - x) * payoff_matrix[i, j]) / (pop_size - 1)
+                fitness_j = ((pop_size - x - 1) * payoff_matrix[j, j] +
+                            x * payoff_matrix[j, i]) / (pop_size - 1)
+                return fitness_i - fitness_j
+
+        def full_fitness_difference_pairwise_functional(i: int, j: int, population_state: np.ndarray) -> float:
+                """
+                Calculates the fitness of strategy i in a population with state :param population_state,
+                assuming pairwise interactions (2-player game).
+
+                Parameters
+                ----------
+                i : int
+                    index of the strategy that will reproduce
+                j : int
+                    index of the strategy that will die
+                population_state : numpy.ndarray[numpy.int64[m,1]]
+                                vector containing the counts of each strategy in the population
+
+                Returns
+                -------
+                float
+                The fitness difference between the two strategies for the given population state
+                """
+                names = ["pop_size", "nb_strategies", "payoffs_fn"]
+                pop_size, nb_strategies, payoffs_fn = [class_args[k] for k in names]
+                # Here, our payoffs depend on the population state.
+                payoff_matrix = payoffs_fn(population_state)
+                fitness_i = (population_state[i] - 1) * payoff_matrix[i, i]
+                for strategy in range(nb_strategies):
+                    if strategy == i:
+                        continue
+                    fitness_i += population_state[strategy] * payoff_matrix[i, strategy]
+                fitness_j = (population_state[j] - 1) * payoff_matrix[j, j]
+                for strategy in range(nb_strategies):
+                    if strategy == j:
+                        continue
+                    fitness_j += population_state[strategy] * payoff_matrix[j, strategy]
+
+                return (fitness_i - fitness_j) / (pop_size - 1)
+
+        evolver.full_fitness = full_fitness_difference_pairwise_functional
+        evolver.fitness = fitness_pair_functional
+        return evolver
+
+    beta_list = np.logspace(-3, 1, 50)
+    evolver = generate_evolver(params)
+    # Enforce mu=0, otherwise, we would be computing the full stationary
+    # distribution of the population state for every value of beta.
+    # We just want the stationary distribution with respect to the monomorphic
+    # strategy profiles.
+    evolver.mu = 0
+    stationary_distributions = []
+    for _, beta in tqdm(enumerate(beta_list)):
+        sd = evolver.calculate_stationary_distribution(beta)
+        stationary_distributions.append(sd)
+    
+    conflict_frequency_1 = [sd[-1] + sd[-2] for sd in stationary_distributions]
+    
+    # Create comparison data for two strategies.
+    new_params = {**params, "strategies": ["CC", "HD"], "payoffs_fn": pd_payoffs}
+    evolver = generate_evolver(new_params)
+    evolver.mu = 0
+    stationary_distributions = []
+    for _, beta in tqdm(enumerate(beta_list)):
+        sd = evolver.calculate_stationary_distribution(beta)
+        stationary_distributions.append(sd)
+    
+    conflict_frequency_2 = [sd[-1] for sd in stationary_distributions]
+    
+    font = {
+        # 'family' : 'normal',
+            # 'weight' : 'bold'
+            }
+    SMALL_SIZE = 14
+    MEDIUM_SIZE = 16
+    BIGGER_SIZE = 18
+
+    plt.rc('font', **font, size=MEDIUM_SIZE)          # controls default text sizes
+    plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
+    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=MEDIUM_SIZE)    # fontsize of the tick labels
+    plt.rc('ytick', labelsize=MEDIUM_SIZE)    # fontsize of the tick labels
+    plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+    
+    plt.rc('font', **font)
+
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    # Plotting each strategy's frequency
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+    ax.plot(beta_list, conflict_frequency_1, label="Defection rate in presence of deception", color=colors[1], linewidth=2)
+    ax.plot(beta_list, conflict_frequency_2, label="Defection rate without deception", color=colors[0], linewidth=2)
+    # Set the x axis to be logarithmic
+    ax.set_xscale('log')  # Setting the x-axis to logarithmic scale
+    # Setting the title and labels
+    # ax.set_title('The influence of Deception on Defection Rates as we vary Selection Intensity')
+    ax.set_xlabel('Selection Intensity (beta)', labelpad=10)
+    ax.set_ylabel(r'Defection Rate (% of HD and TD)', labelpad=10)
+    ax.legend()
+    ax.grid(False)  # Adding grid for better clarity
+    ax.set_xscale('log')  # Setting the x-axis to logarithmic scale
+    ax.set_box_aspect(0.75)
     plt.tight_layout()
     
     return fig
