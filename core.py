@@ -230,18 +230,74 @@ def tactical_deception_payoffs(freqs: np.ndarray, params: dict) -> np.ndarray:
     ])
     return payoffs
 
+def tactical_deception_payoffs_concave(freqs: np.ndarray, params: dict) -> np.ndarray:
+    names = ["b", "c", "s", "d"]
+    b, c, s, d = [params[k] for k in names]
+    q = (1 - (freqs[2] / np.sum(freqs)))**0.1
+    payoffs = np.array([
+        [b-c, -c*s, -c*(q + s - q*s)],
+        [b*s, 0, 0],
+        [b*(q + s - q*s) - d, -d, -d]
+    ])
+    return payoffs
+
+def tactical_deception_payoffs_convex(freqs: np.ndarray, params: dict) -> np.ndarray:
+    names = ["b", "c", "s", "d"]
+    b, c, s, d = [params[k] for k in names]
+    q = 1 - (freqs[2] / np.sum(freqs))**10
+    payoffs = np.array([
+        [b-c, -c*s, -c*(q + s - q*s)],
+        [b*s, 0, 0],
+        [b*(q + s - q*s) - d, -d, -d]
+    ])
+    return payoffs
+
+def tactical_deception_payoffs_s_curve(freqs: np.ndarray, params: dict) -> np.ndarray:
+    names = ["b", "c", "s", "d"]
+    b, c, s, d = [params[k] for k in names]
+    bias = params.get("bias", 0.5)
+    def tanh_variant(x, k=5):
+        return (1 - np.tanh(k * (x - bias))) / 2
+    q = tanh_variant(freqs[2] / np.sum(freqs))
+    payoffs = np.array([
+        [b-c, -c*s, -c*(q + s - q*s)],
+        [b*s, 0, 0],
+        [b*(q + s - q*s) - d, -d, -d]
+    ])
+    return payoffs
+
+def pd_payoffs(freqs: np.ndarray, params: dict) -> np.ndarray:
+    names = ["b", "c", "s", "d"]
+    b, c, s, d = [params[k] for k in names]
+    payoffs = np.array([
+        [b-c, -c*s],
+        [b*s, 0],
+    ])
+    return payoffs
+
+def pd_payoffs_duped(freqs: np.ndarray, params: dict) -> np.ndarray:
+    names = ["b", "c", "s", "d"]
+    b, c, s, d = [params[k] for k in names]
+    payoffs = np.array([
+        [b-c, -c*s, -c*s],
+        [b*s, 0, 0],
+        [b*s, 0, 0]
+    ])
+    return payoffs
+
 def plot_simplex(params):
     type_labels = params["strategies"]
+    payoffs_fn = params["payoffs_fn"]
     simplex = egt.plotting.Simplex2D()
     frequencies = np.asarray(xy_to_barycentric_coordinates(simplex.X, simplex.Y, simplex.corners))
-    gradients = vectorized_replicator_equation(frequencies, tactical_deception_payoffs, params)
+    gradients = vectorized_replicator_equation(frequencies, payoffs_fn, params)
     xy_results = vectorized_barycentric_to_xy_coordinates(gradients, simplex.corners)
     Ux = xy_results[:, :, 0].astype(np.float64)
     Uy = xy_results[:, :, 1].astype(np.float64)
     
     # We also need to define some callable replicator equations for the plotting tools
-    calculate_gradients = lambda u: replicator_equation(u, tactical_deception_payoffs, params)[:, 0]
-    calculate_gradients_alt = lambda u, t: replicator_equation(u, tactical_deception_payoffs, params)[:, 0]
+    calculate_gradients = lambda u: replicator_equation(u, payoffs_fn, params)[:, 0]
+    calculate_gradients_alt = lambda u, t: replicator_equation(u, payoffs_fn, params)[:, 0]
 
     
     # Compute equilibria and their stability
@@ -249,7 +305,7 @@ def plot_simplex(params):
                     nb_strategies=frequencies.shape[0],
                     nb_initial_random_points=100)
     roots_xy = [barycentric_to_xy_coordinates(root, corners=simplex.corners) for root in roots]
-    stability = check_replicator_stability_pairwise_games(roots, tactical_deception_payoffs, params)
+    stability = check_replicator_stability_pairwise_games(roots, payoffs_fn, params)
     
     fig, ax = plt.subplots(figsize=(10,8))
 
